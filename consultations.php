@@ -1,10 +1,9 @@
 <?php
 session_start();
 if (!isset($_SESSION['username'])) {
-    header('Location: home.html');
+    header('Location: home.php');
     exit;
 }
-
 
 // Database connection
 $conn = mysqli_connect("localhost", "root", "", "nutrition_consultation_service");
@@ -14,24 +13,44 @@ if (!$conn) {
     die("Connection failed: " . mysqli_connect_error());
 }
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Handle form submission
-    $username = $_SESSION['username'];
-    
-    // Fetch the referenced_id associated with the username
-    $query = "SELECT refferenced_id FROM users WHERE username = '$username'";
-    $user_result = mysqli_query($conn, $query);
-    $row = mysqli_fetch_assoc($user_result);
-    $client_id = $row['refferenced_id'];
-    
-    $session_note = $_POST['session_note'];
+$username = $_SESSION['username'];
+
+// Fetch the referenced_id associated with the username
+$query = "SELECT refferenced_id FROM users WHERE username = '$username'";
+$user_result = mysqli_query($conn, $query);
+if (!$user_result || mysqli_num_rows($user_result) == 0) {
+    die("User not found or query failed: " . mysqli_error($conn));
+}
+$row = mysqli_fetch_assoc($user_result);
+$client_id = $row['refferenced_id'];
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['session_note'])) {
+    // Handle new case submission
+    $case = mysqli_real_escape_string($conn, $_POST['session_note']);
 
     // Insert case into the database
     $sql = "INSERT INTO consultations (client_id, session_note) VALUES ('$client_id', '$session_note')";
     if (mysqli_query($conn, $sql)) {
-        echo "<script>alert('session submitted successfully.')</script>";
+        echo "<script>alert('Case submitted successfully.')</script>";
     } else {
         echo "Error: " . $sql . "<br>" . mysqli_error($conn);
+    }
+}
+
+// Fetch cases for the dropdown
+$cases_query = "SELECT consultation_id, session_note FROM consultations WHERE client_id = '$client_id'";
+$cases_result = mysqli_query($conn, $cases_query);
+
+// Handle fetching of consultation details
+$selected_case = null;
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['consultation_id'])) {
+    $selected_case_id = mysqli_real_escape_string($conn, $_POST['consultation_id']);
+    $consultation_query = "SELECT session_note FROM consultations WHERE consultation_id = '$selected_case_id'";
+    $consultation_result = mysqli_query($conn, $consultation_query);
+    if ($consultation_result && mysqli_num_rows($consultation_result) > 0) {
+        $selected_case = mysqli_fetch_assoc($consultation_result)['session_note'];
+    } else {
+        $selected_case = "No case details found for the selected case.";
     }
 }
 ?>
@@ -42,7 +61,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Consultation</title>
-        <style type="text/css">
+    <style type="text/css">
         @font-face {
           font-family: "Poppins-Regular";
           src: url("../../fonts/poppins/Poppins-Regular.ttf");
@@ -57,7 +76,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             padding: 0;
             font-family: "Poppins-Regular";
             position: relative;
-            background-image: url('img/img2.jpg');
+            background-image: url('../../img/2.jpg');
             background-size: cover;
         }
 
@@ -124,8 +143,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             bottom: -5px;
             width: 100%;
             height: 2px;
-            background-color:back;
+            background-color: black;
         }
+
         form {
             max-width: 600px;
             margin: 0 auto;
@@ -142,7 +162,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         select,
         textarea {
             width: 80%;
-            padding: 40px;
+            padding: 10px;
             margin: 5px 0 15px 0;
             border: 1px solid #ccc;
             border-radius: 5px;
@@ -210,21 +230,43 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <h2><span style="color: #1aa3ff;">nutrition -</span>consultation Platform </h2>
             </div>
             <ul class="nav-links">
-             <li class="active"><a href="home.php">Home</a></li>
-             <li><a href="comunication.php">comunication</a></li>
-             <li><a href="profile.html">Profile</a></li>
-             <li><a href="appointment.html">Appointments</a></li>
-             <li><a href="chat.php">Chat</a></li>
-             <li><a href="consultations.php">consultation</a></li>
+                <li class="active"><a href="#home">Home</a></li>
+                                    <li><a href="comunication.php">comunication</a></li>
+                                    <li><a href="profile.html">Profile</a></li>
+                                    <li><a href="appointment.html">Appointments</a></li>
+                                    <li><a href="chat.php">Chat</a></li>
+                                    <li><a href="consultations.php">consultation</a></li>
             </ul>
         </nav>
     </header>
 
     <form method="POST" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>">
-        <label for="session_note">MATTER:</label><br>
+        <label for="session_note">session_note:</label><br>
         <textarea id="session_note" name="session_note" rows="4" cols="50" required></textarea><br><br>
         <input type="submit" value="Submit">
     </form>
+
+    <form method="POST" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" style="margin-top: 20px;">
+        <label for="consultation_id">Select session_note:</label><br>
+        <select id="consultation_id" name="consultation_id" required>
+            <option value="" disabled selected>Select a session</option>
+            <?php
+            while ($case_row = mysqli_fetch_assoc($cases_result)) {
+                echo "<option value='" . $case_row['consultation_id'] . "'>" . $case_row['session_note'] . "</option>";
+            }
+            ?>
+        </select><br><br>
+        <input type="submit" value="View session_note">
+    </form>
+
+    <?php
+    if ($selected_case) {
+        echo "<div style='max-width: 600px; margin: 0 auto; margin-top: 20px; padding: 20px; background: rgba(255, 255, 255, 0.8); border-radius: 10px;'>
+                <h3>Selected Case Details:</h3>
+                <p>$selected_case</p>
+              </div>";
+    }
+    ?>
 
     <button class="logout-btn" onclick="logout()">Logout</button>
     
